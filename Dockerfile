@@ -1,10 +1,11 @@
 FROM python:3.11-slim
 
-# Установка FFmpeg и зависимостей
+# Установка FFmpeg и зависимостей (включая build-essential)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,9 +21,6 @@ COPY *.py ./
 
 # Создаём директории
 RUN mkdir -p temp results cache logs
-
-# Скачиваем Whisper модель (опционально, можно закомментировать если долго)
-# RUN python -m whisper download base
 
 # Запуск
 CMD ["python", "main.py"]
