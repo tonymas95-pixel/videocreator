@@ -11,7 +11,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --upgrade pip setuptools wheel && \
+# ФИКС: сначала ставим setuptools, потом всё остальное
+RUN pip install --upgrade pip && \
+    pip install setuptools==69.5.1 wheel && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
