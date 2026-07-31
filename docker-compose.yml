@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  shorts-bot:
+    build: .
+    container_name: shorts_bot
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - WHISPER_MODEL=base
+      - LOG_LEVEL=INFO
+    volumes:
+      # Сохраняем результаты на хосте
+      - ./results:/app/results
+      - ./temp:/app/temp
+      - ./cache:/app/cache
+      - ./bot.db:/app/bot.db
+      - ./bot.log:/app/bot.log
+    restart: unless-stopped
+    # Для облачных сервисов может понадобиться:
+    # ports:
+    #   - "8080:8080"
+    
+    # Лимиты на память (опционально)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 4G
+    #     reservations:
+    #       memory: 2G
+
+  # Опционально: PostgreSQL для масштабирования
+  # database:
+  #   image: postgres:15-alpine
+  #   container_name: shorts_bot_db
+  #   environment:
+  #     POSTGRES_DB: shorts_bot
+  #     POSTGRES_USER: botuser
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:
