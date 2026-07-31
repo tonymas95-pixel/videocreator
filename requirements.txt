@@ -1,6 +1,18 @@
+# Telegram и основные
 python-telegram-bot==20.7
 python-dotenv==1.0.0
-opencv-python==4.8.1.78
-Pillow==10.0.1
 requests==2.31.0
 aiofiles==23.2.1
+
+# Обработка видео
+opencv-python==4.8.1.78
+Pillow==10.0.1
+moviepy==1.0.3
+
+# Faster-Whisper (легче в 10 раз)
+faster-whisper==0.10.0
+
+# Аудио (минимально)
+numpy==1.24.3
+scipy==1.11.4
+pydub==0.25.1
