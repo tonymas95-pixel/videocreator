@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Установка FFmpeg и зависимостей (включая build-essential)
+# Установка FFmpeg и зависимостей
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
@@ -12,6 +12,9 @@ WORKDIR /app
 
 # Копируем requirements
 COPY requirements.txt .
+
+# Обновляем setuptools перед pip install
+RUN pip install --upgrade setuptools
 
 # Установка зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
