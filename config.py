@@ -13,13 +13,20 @@ class Config:
     RESULTS_DIR = "/app/results"
     CACHE_DIR = "/app/cache"
     
+    # База данных
+    DB_FILE = "/app/bot.db"
+    
     # Настройки видео
-    MAX_VIDEO_DURATION = 120  # секунд
-    OUTPUT_DURATION = 45  # секунд
+    MAX_VIDEO_DURATION = 120
+    OUTPUT_DURATION = 45
     FPS = 24
-    RESOLUTION = (1080, 1920)  # 9:16
+    RESOLUTION = (1080, 1920)
     
     # Настройки субтитров
     FONT_SIZE = 40
     FONT_COLOR = "white"
     HIGHLIGHT_COLOR = "#FF3366"
+
+# Для обратной совместимости
+DB_FILE = Config.DB_FILE
+DATABASE_SETTINGS = {"db_file": Config.DB_FILE}
