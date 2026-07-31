@@ -1,136 +1,65 @@
-"""
-Video processing logic - core algorithm
-"""
-
-import logging
-from pathlib import Path
-from datetime import datetime
 import os
+import logging
+import uuid
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip, vfx
+import requests
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from config import Config
 from transcriber import Transcriber
-from analyzer import VideoAnalyzer
 from subtitle_generator import SubtitleGenerator
 from effects_engine import EffectsEngine
-from utils import calculate_reduction_percent, estimate_ctr
-from config import RESULTS_DIR, TEMP_DIR, TARGET_FINAL_DURATION
+from database import Database
 
 logger = logging.getLogger(__name__)
 
-
-def process_video_logic(
-    video_path,
-    user_id,
-    style="bright",
-    preview_mode=False,
-    branding_text="",
-    custom_comment=""
-):
-    """
-    Основная логика обработки видео
-    
-    Процесс:
-    1. Транскрибация (распознавание речи)
-    2. Анализ видео (пики, паузы)
-    3. Нарезка и монтаж
-    4. Добавление субтитров и эффектов
-    5. Экспорт финального видео
-    
-    Args:
-        video_path: путь к исходному видео
-        user_id: ID пользователя
-        style: стиль субтитров
-        preview_mode: True для превью (10 сек), False для полного видео
-        branding_text: текст брендинга
-        custom_comment: комментарий пользователя
-        
-    Returns:
-        dict с результатами или путь до файла при preview_mode=True
-    """
+async def process_video_logic(update: Update, context: ContextTypes.DEFAULT_TYPE, is_preview: bool = False):
+    """Обработка видео с заглушкой"""
+    user_id = update.effective_user.id
     
     try:
-        logger.info(f"Starting video processing for user {user_id}")
-        logger.info(f"Preview mode: {preview_mode}")
+        # Сохраняем видео
+        video_file = await update.message.video.get_file()
+        input_path = f"/app/temp/input_{user_id}_{uuid.uuid4()}.mp4"
+        await video_file.download_to_drive(input_path)
         
-        # Шаг 1: Транскрибация
-        logger.info("Step 1: Transcription...")
-        transcriber = Transcriber(model="base")
-        transcript_result = transcriber.transcribe(video_path)
+        # Отправляем сообщение о начале
+        msg = await update.message.reply_text("🎬 Начинаю обработку... (тестовый режим)")
         
-        if not transcript_result.get("success"):
-            logger.error("Transcription failed")
-            return None if preview_mode else {"error": "Transcription failed"}
+        # Загружаем видео
+        clip = VideoFileClip(input_path)
         
-        segments = transcript_result.get("segments", [])
-        transcript_text = transcript_result.get("text", "")
-        logger.info(f"Transcription complete: {len(transcript_text)} characters")
+        # Простая обрезка до 30 секунд
+        if clip.duration > 30:
+            clip = clip.subclip(0, 30)
         
-        # Шаг 2: Анализ видео
-        logger.info("Step 2: Video analysis...")
-        analyzer = VideoAnalyzer()
-        accents = analyzer.find_accents(segments)
-        pauses = analyzer.detect_pauses([])  # В реальности нужно извлечь аудио
-        filler_count = analyzer.detect_filler_words(transcript_text)
+        # Уменьшаем размер
+        clip = clip.resize(height=720)
         
-        logger.info(f"Found {len(accents)} accents, {len(pauses)} pauses, {filler_count} fillers")
+        # Сохраняем результат
+        output_path = f"/app/results/result_{user_id}_{uuid.uuid4()}.mp4"
+        clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio_codec='aac',
+            fps=24,
+            preset='fast'
+        )
         
-        # Шаг 3: Генерация субтитров
-        logger.info("Step 3: Subtitle generation...")
-        subtitle_gen = SubtitleGenerator(style=style)
-        subtitles = subtitle_gen.generate_subtitles(segments, accents)
+        clip.close()
         
-        # Шаг 4: Эффекты
-        logger.info("Step 4: Effects generation...")
-        effects = EffectsEngine()
-        zoom_effects = effects.generate_zoom_effects(accents, 0)  # video_duration = 0 для заглушки
-        text_animations = effects.generate_text_animations(subtitles)
-        emoji_effects = effects.generate_emoji_effects(subtitles)
+        # Отправляем результат
+        with open(output_path, 'rb') as f:
+            await update.message.reply_video(
+                video=f,
+                caption="✅ Готово! Видео обрезано до 30 секунд.\n\n🔥 Тестовый режим работает!"
+            )
         
-        # Шаг 5: Подготовка выходного файла
-        logger.info("Step 5: Output file preparation...")
+        # Удаляем файлы
+        os.remove(input_path)
+        os.remove(output_path)
         
-        output_dir = Path(RESULTS_DIR)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"shorts_{user_id}_{timestamp}.mp4"
-        output_path = output_dir / output_filename
-        
-        # В реальном приложении здесь был бы FFmpeg/OpenCV код для создания видео
-        # Сейчас просто копируем исходный файл в качестве заглушки
-        import shutil
-        shutil.copy(video_path, output_path)
-        
-        # Подготовка статистики
-        stats = {
-            "original_duration": 120.0,  # Заглушка
-            "final_duration": 38.0 if not preview_mode else 10.0,
-            "reduction_percent": calculate_reduction_percent(120, 38 if not preview_mode else 10),
-            "accents_count": len(accents),
-            "pauses_removed": len(pauses),
-            "file_size_mb": os.path.getsize(output_path) / (1024 * 1024),
-            "predicted_ctr": estimate_ctr({
-                "emoji_count": len(emoji_effects),
-                "accents_count": len(accents),
-                "reduction_percent": calculate_reduction_percent(120, 38)
-            })
-        }
-        
-        logger.info(f"Processing complete. Output: {output_path}")
-        logger.info(f"Stats: {stats}")
-        
-        if preview_mode:
-            return str(output_path)
-        else:
-            return {
-                "output_video": str(output_path),
-                "stats": stats,
-                "subtitle_count": len(subtitles),
-                "effects_applied": {
-                    "zooms": len(zoom_effects),
-                    "animations": len(text_animations),
-                    "emojis": len(emoji_effects)
-                }
-            }
-            
     except Exception as e:
-        logger.error(f"Video processing error: {e}", exc_info=True)
-        return None if preview_mode else {"error": str(e)}
+        logger.error(f"Error: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)[:100]}")
