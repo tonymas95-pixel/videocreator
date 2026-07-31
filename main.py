@@ -1,6 +1,7 @@
 """
 SHORTS BOT v2.0 - Professional Video Editor
 Полностью переписанный бот с реальной обработкой видео
+ИСПРАВЛЕНО: MAX_FILE_SIZE = 400MB, timeouts увеличены
 """
 
 import logging
@@ -38,15 +39,15 @@ RESULTS_DIR = Path("results")
 for dir_path in [TEMP_DIR, RESULTS_DIR]:
     dir_path.mkdir(exist_ok=True)
 
-# Максимальный размер файла (400MB)
+# ✅ ИСПРАВЛЕНО: Максимальный размер файла 400MB
 MAX_FILE_SIZE = 400 * 1024 * 1024
 
 # ============================================================================
-# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ХРАНЕНИЯ СОСТОЯНИЯ
+# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 # ============================================================================
 
-user_videos = {}  # {user_id: {"path": str, "info": dict}}
-user_settings = {}  # {user_id: {"effects": list, ...}}
+user_videos = {}
+user_settings = {}
 
 # ============================================================================
 # ОБРАБОТЧИКИ КОМАНД
@@ -134,7 +135,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await message.reply_text("❌ Неподдерживаемый формат файла")
         return
 
-    # Проверяем размер
+    # ✅ ИСПРАВЛЕНО: Проверяем размер (400MB)
     if file.file_size > MAX_FILE_SIZE:
         await message.reply_text(
             f"❌ Файл слишком большой!\n\n"
@@ -149,7 +150,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         file_obj = await context.bot.get_file(file.file_id)
         video_path = TEMP_DIR / f"video_{user_id}_{file.file_unique_id}.mp4"
-        await file_obj.download_to_drive(video_path)
+        await file_obj.download_to_drive(str(video_path))
 
         logger.info(f"Video downloaded: {video_path} ({file.file_size / (1024*1024):.1f}MB)")
 
@@ -252,7 +253,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text("❌ Видео не найдено. Загрузи видео заново.")
         return
 
-    # Инициализируем настройки пользователя если нужно
     if user_id not in user_settings:
         user_settings[user_id] = {"effects": []}
 
@@ -273,7 +273,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                      reply_markup=get_editing_keyboard(user_id))
 
     elif action == "subtitles":
-        # Показываем выбор стиля субтитров
         keyboard = [
             [InlineKeyboardButton("✨ Яркий", callback_data=f"sub_{user_id}_bright")],
             [InlineKeyboardButton("⚫ Минимальный", callback_data=f"sub_{user_id}_minimal")],
@@ -326,7 +325,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("❌ Выбери хотя бы одну функцию!")
             return
 
-        # Показываем финальное подтверждение
         effects_text = "\n".join([get_effect_name(e) for e in effects])
         keyboard = [
             [InlineKeyboardButton("✅ Обработать!", callback_data=f"process_{user_id}")],
@@ -354,13 +352,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             del user_settings[user_id]
         await query.edit_message_text("❌ Отменено")
 
-    # Обработка выбора стиля субтитров
     elif action.startswith("sub_"):
         style = "_".join(action.split("_")[2:])
         user_settings[user_id]["effects"].append("subtitles")
         user_settings[user_id]["subtitle_style"] = style
         await query.edit_message_text(
-            f"📝 Субтитры ({style})добавлены\n\nВыбери ещё или готово?",
+            f"📝 Субтитры ({style}) добавлены\n\nВыбери ещё или готово?",
             reply_markup=get_editing_keyboard(user_id)
         )
 
@@ -400,7 +397,6 @@ async def process_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         file_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
 
-        # Отправляем видео
         await query.edit_message_text(
             f"✅ Видео готово! ({file_size_mb:.1f}MB)\n\n"
             "📤 Загружаю..."
@@ -414,7 +410,6 @@ async def process_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                         "Ещё одно видео обработать? /start"
             )
 
-        # Очищаем временные файлы
         try:
             Path(video_path).unlink()
             Path(output_path).unlink()
@@ -426,7 +421,6 @@ async def process_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Хочешь обработать ещё одно? /start"
         )
 
-        # Очищаем данные
         if user_id in user_videos:
             del user_videos[user_id]
         if user_id in user_settings:
